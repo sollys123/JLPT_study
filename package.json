@@ -1,0 +1,18 @@
+{
+  "name": "jlpt-wisteria-study-system",
+  "version": "4.1.0",
+  "private": true,
+  "description": "JLPT study dashboard with a local FSRS-6 scheduler and optional official parameter optimizer tooling.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node tests/fsrs.test.js && node tests/dictionary.test.js && python tests/static_app_test.py",
+    "test:fsrs": "node tests/fsrs.test.js",
+    "test:dictionary": "node tests/dictionary.test.js",
+    "optimize-fsrs": "node tools/optimize_fsrs.mjs"
+  },
+  "dependencies": {
+    "@open-spaced-repetition/binding": "0.5.0"
+  }
+}

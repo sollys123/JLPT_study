@@ -1,0 +1,10 @@
+_site/
+node_modules/
+*.part
+__pycache__/
+*.pyc
+.DS_Store
+data/*.tgz
+data/*.tar.gz
+tests/*.png
+tests/_backup_test.json

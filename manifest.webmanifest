@@ -1,0 +1,31 @@
+{
+  "name": "JLPT 紫藤学习系统",
+  "short_name": "紫藤JLPT",
+  "description": "N4 到 N2 学习日历、法国旅行模式、FSRS-6 词卡复习与 JMdict 离线词典。",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbf9ff",
+  "theme_color": "#7652b5",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-192.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
