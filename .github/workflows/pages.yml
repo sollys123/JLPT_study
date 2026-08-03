@@ -14,6 +14,11 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  JMDICT_RELEASE: 3.6.2+20260727141257
+  JMDICT_COMMON: jmdict-eng-common-3.6.2+20260727141257.json.tgz
+  JMDICT_EXAMPLES: jmdict-examples-eng-3.6.2+20260727141257.json.tgz
+
 jobs:
   test-and-deploy:
     environment:
@@ -21,13 +26,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
@@ -37,8 +45,14 @@ jobs:
           node tests/dictionary.test.js
           python tests/static_app_test.py
 
-      - name: Fetch and verify JMdict packages
-        run: python tools/fetch_jmdict.py both
+      - name: Fetch, verify and inventory JMdict packages
+        run: |
+          python tools/fetch_jmdict.py both
+          test -s "data/$JMDICT_COMMON"
+          test -s "data/$JMDICT_EXAMPLES"
+          test -s data/jmdict-manifest.json
+          echo "JMdict source files:"
+          ls -lh "data/$JMDICT_COMMON" "data/$JMDICT_EXAMPLES" data/jmdict-manifest.json
 
       - name: Build clean Pages artifact
         run: |
@@ -47,12 +61,90 @@ jobs:
           cp index.html manifest.webmanifest sw.js .nojekyll VERSION.json LICENSES.md _site/
           cp -R assets data _site/
 
-      - uses: actions/configure-pages@v5
+      - name: Verify Pages artifact before upload
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import pathlib
 
-      - uses: actions/upload-pages-artifact@v3
+          root = pathlib.Path('_site')
+          manifest_path = root / 'data' / 'jmdict-manifest.json'
+          if not manifest_path.is_file():
+              raise SystemExit('Missing _site/data/jmdict-manifest.json')
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          for kind, item in manifest['packages'].items():
+              path = root / 'data' / item['file']
+              if not path.is_file():
+                  raise SystemExit(f'Missing Pages artifact file: {path}')
+              size = path.stat().st_size
+              if size != item['bytes']:
+                  raise SystemExit(f'Size mismatch for {path}: {size} != {item["bytes"]}')
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if digest != item['sha256']:
+                  raise SystemExit(f'SHA-256 mismatch for {path}: {digest}')
+              print(f'[{kind}] artifact OK: {path} ({size:,} bytes)')
+          PY
+          find _site -maxdepth 2 -type f -printf '%p %s bytes\n' | sort
+
+      - name: Smoke-test built site over HTTP
+        run: |
+          python -m http.server 4173 --directory _site >/tmp/jlpt-pages-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          sleep 1
+          curl --fail --silent --show-error http://127.0.0.1:4173/ -o /dev/null
+          curl --fail --silent --show-error http://127.0.0.1:4173/data/jmdict-manifest.json -o /tmp/jmdict-manifest.json
+          curl --fail --silent --show-error --range 0-1023 "http://127.0.0.1:4173/data/$JMDICT_COMMON" -o /dev/null
+          curl --fail --silent --show-error --range 0-1023 "http://127.0.0.1:4173/data/$JMDICT_EXAMPLES" -o /dev/null
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify deployed JMdict resources
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          BASE="${PAGE_URL%/}/"
+          fetch_with_retry() {
+            local url="$1"
+            local output="$2"
+            for attempt in 1 2 3 4 5 6; do
+              if curl --fail --location --silent --show-error --connect-timeout 20 --max-time 180 "$url" -o "$output"; then
+                return 0
+              fi
+              echo "Attempt $attempt failed for $url; waiting for Pages propagation..."
+              sleep 10
+            done
+            return 1
+          }
+          fetch_with_retry "${BASE}data/jmdict-manifest.json" /tmp/deployed-jmdict-manifest.json
+          fetch_with_retry "${BASE}data/$JMDICT_COMMON" "/tmp/$JMDICT_COMMON"
+          fetch_with_retry "${BASE}data/$JMDICT_EXAMPLES" "/tmp/$JMDICT_EXAMPLES"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+
+          manifest = json.loads(pathlib.Path('/tmp/deployed-jmdict-manifest.json').read_text(encoding='utf-8'))
+          for kind, item in manifest['packages'].items():
+              path = pathlib.Path('/tmp') / item['file']
+              if not path.is_file():
+                  raise SystemExit(f'Deployed file missing: {path}')
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if digest != item['sha256']:
+                  raise SystemExit(f'Deployed SHA-256 mismatch for {kind}: {digest}')
+              if path.stat().st_size != item['bytes']:
+                  raise SystemExit(f'Deployed size mismatch for {kind}')
+              print(f'[{kind}] deployed resource verified: {path.stat().st_size:,} bytes')
+          PY
