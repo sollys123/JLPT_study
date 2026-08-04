@@ -31,7 +31,7 @@ def polish_index(path: Path) -> None:
         ('<h2>智能欠课队列</h2><p>核心任务顺延，重复复习自动合并，可选任务自动降级。</p>', '<h2>待补任务</h2><p>未完成的核心任务会顺延，重复复习自动合并，可选任务不累积。</p>'),
         ('<h2>专注计时</h2><p>选择任务后开始，也可直接自由计时。</p>', '<h2>学习计时</h2><p>选择任务后开始，也可直接自由计时。</p>'),
         ('<h2>当日记录</h2><p>保存后会进入统计与日志。</p>', '<h2>今日记录</h2><p>保存后会计入统计与学习记录。</p>'),
-        ('<button class="mood" data-mood="濒死">🫠 濒死</button>', '<button class="mood" data-mood="很吃力">🫠 很吃力</button>'),
+        ('<button class="mood" data-mood="濒死">🫠 濒死</button>', '<button class="mood" data-mood="濒死">💀 濒死</button>'),
         ('<label>学习备注 / 错题线索</label><textarea id="dayNote" placeholder="今天最卡在哪里？明天要避开什么？"></textarea>', '<label>学习备注与错题线索</label><textarea id="dayNote" placeholder="今天最难的部分是什么？明天需要继续什么？"></textarea>'),
         ('<h2>本周脉搏</h2><p>不追求完美连续，只看有效推进。</p>', '<h2>本周进度</h2><p>查看有效学习天数与完成情况。</p>'),
         ('<h2>阶段路线</h2><p>阶段进度由每日任务完成情况自动计算。</p>', '<h2>阶段计划</h2><p>阶段进度由每日任务完成情况自动计算。</p>'),
