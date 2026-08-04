@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Normalize the public-facing copy of the built JLPT Study site.
+"""Normalize public-facing copy in the built JLPT Study artifact.
 
-The source application keeps its stable storage keys and internal identifiers.
-Only files in the Pages build artifact are rewritten.
+This runs only against the temporary Pages artifact, so existing browser storage
+keys and user data remain compatible with earlier versions.
 """
 from __future__ import annotations
 
@@ -12,8 +12,9 @@ import re
 from pathlib import Path
 
 
-PLAIN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("JLPT 紫藤学习系统", "JLPT Study"),
+    ("JLPT紫藤学习系统", "JLPT Study"),
     ("JLPT 紫藤计划", "JLPT Study"),
     ("N4 → N2 学习系统", "N4 → N2 备考计划"),
     ("紫藤记忆舱", "词卡复习"),
@@ -69,20 +70,32 @@ PLAIN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("旅行豁免", "旅行休息"),
 )
 
+FORBIDDEN = (
+    "紫藤学习系统",
+    "紫藤计划",
+    "紫藤记忆舱",
+    "词典与SRS",
+    "词典与 SRS",
+)
 
-def replace_plain(text: str) -> str:
-    for old, new in PLAIN_REPLACEMENTS:
+
+def replace_text(text: str) -> str:
+    for old, new in REPLACEMENTS:
         text = text.replace(old, new)
     return text
 
 
+def rewrite_text_file(path: Path) -> None:
+    if not path.exists():
+        return
+    path.write_text(replace_text(path.read_text(encoding="utf-8")), encoding="utf-8")
+
+
 def polish_index(path: Path) -> None:
-    text = replace_plain(path.read_text(encoding="utf-8"))
+    text = replace_text(path.read_text(encoding="utf-8"))
 
     exact = (
         ("<div class=\"brand-mark\">藤</div>", "<div class=\"brand-mark\">J</div>"),
-        ("data-mood=\"很吃力\">🫠 很吃力", "data-mood=\"濒死\">💀 濒死"),
-        ("data-mood=\"濒死\">🫠 濒死", "data-mood=\"濒死\">💀 濒死"),
         (">SRS</button>", ">词卡</button>"),
         ("label:'SRS'", "label:'词卡复习'"),
         ("<h3>词条与卡片</h3>", "<h3>词条编辑</h3>"),
@@ -116,7 +129,6 @@ def polish_index(path: Path) -> None:
         '<button class="mood" data-mood="濒死">💀 濒死</button>',
         text,
     )
-
     text = re.sub(r'(<button data-view="roadmap"><b>◇</b>)(?:课程|路线)(</button>)', r'\1路线\2', text)
     text = re.sub(r'(<button data-view="vocab"><b>字</b>)(?:SRS|词卡)(</button>)', r'\1词卡\2', text)
 
@@ -142,12 +154,6 @@ const weekLabel=week=>{const value=String(week||'').trim();if(!value)return '自
     path.write_text(text, encoding="utf-8")
 
 
-def polish_srs(path: Path) -> None:
-    text = replace_plain(path.read_text(encoding="utf-8"))
-    text = text.replace("去词典制卡，或者享受一张干净的桌面。", "前往“查词制卡”添加词条。")
-    path.write_text(text, encoding="utf-8")
-
-
 def polish_manifest(path: Path) -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
     data.update(
@@ -162,9 +168,26 @@ def polish_manifest(path: Path) -> None:
 
 def polish_version(path: Path) -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
-    data["version"] = "4.2.1"
+    data["version"] = "4.2.2"
     data["built"] = "2026-08-04"
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def validate(root: Path) -> None:
+    public_files = [
+        root / "index.html",
+        root / "assets/js/srs-app.js",
+        root / "manifest.webmanifest",
+        root / "data/README.md",
+    ]
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in public_files if path.exists()
+    )
+    required = ("<title>JLPT Study</title>", "词卡复习", "学习路线", "待补任务", "系统设置", "💀 濒死")
+    missing = [marker for marker in required if marker not in combined]
+    legacy = [marker for marker in FORBIDDEN if marker in combined]
+    if missing or legacy:
+        raise RuntimeError(f"UI validation failed; missing={missing}, legacy={legacy}")
 
 
 def main() -> int:
@@ -174,22 +197,18 @@ def main() -> int:
     root = Path(args.root)
 
     polish_index(root / "index.html")
-    polish_srs(root / "assets/js/srs-app.js")
+    rewrite_text_file(root / "assets/js/srs-app.js")
+    rewrite_text_file(root / "data/README.md")
     polish_manifest(root / "manifest.webmanifest")
     polish_version(root / "VERSION.json")
 
     sw_path = root / "sw.js"
     sw = sw_path.read_text(encoding="utf-8")
-    sw = re.sub(r"const CACHE='[^']+';", "const CACHE='jlpt-study-v4.2.1';", sw, count=1)
+    sw = re.sub(r"const CACHE='[^']+';", "const CACHE='jlpt-study-v4.2.2';", sw, count=1)
     sw_path.write_text(sw, encoding="utf-8")
 
-    index = (root / "index.html").read_text(encoding="utf-8")
-    required = ("<title>JLPT Study</title>", "词卡复习", "学习路线", "待补任务", "系统设置", "💀 濒死")
-    missing = [marker for marker in required if marker not in index]
-    if missing:
-        raise RuntimeError(f"Polished site is missing required markers: {missing}")
-
-    print(f"UI copy polished in {root}")
+    validate(root)
+    print(f"UI copy polished and validated in {root}")
     return 0
 
 
