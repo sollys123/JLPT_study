@@ -60,6 +60,18 @@ jobs:
           mkdir -p _site
           cp index.html manifest.webmanifest sw.js .nojekyll VERSION.json LICENSES.md _site/
           cp -R assets data _site/
+          python tools/polish_ui.py --root _site
+
+      - name: Verify UI naming
+        run: |
+          grep -q '<title>JLPT Study</title>' _site/index.html
+          grep -q '词卡复习' _site/index.html
+          grep -q '学习路线' _site/index.html
+          grep -q '系统设置' _site/index.html
+          if grep -RIn --exclude='*.tgz' -E '紫藤学习系统|紫藤计划|紫藤记忆舱|词典与SRS|词典与 SRS' _site; then
+            echo 'Legacy public-facing names remain in the built site.' >&2
+            exit 1
+          fi
 
       - name: Verify Pages artifact before upload
         run: |
@@ -93,7 +105,8 @@ jobs:
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
           sleep 1
-          curl --fail --silent --show-error http://127.0.0.1:4173/ -o /dev/null
+          curl --fail --silent --show-error http://127.0.0.1:4173/ -o /tmp/jlpt-index.html
+          grep -q '<title>JLPT Study</title>' /tmp/jlpt-index.html
           curl --fail --silent --show-error http://127.0.0.1:4173/data/jmdict-manifest.json -o /tmp/jmdict-manifest.json
           curl --fail --silent --show-error --range 0-1023 "http://127.0.0.1:4173/data/$JMDICT_COMMON" -o /dev/null
           curl --fail --silent --show-error --range 0-1023 "http://127.0.0.1:4173/data/$JMDICT_EXAMPLES" -o /dev/null
@@ -110,7 +123,7 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Verify deployed JMdict resources
+      - name: Verify deployed resources
         env:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
@@ -127,13 +140,15 @@ jobs:
             done
             return 1
           }
+          fetch_with_retry "${BASE}" /tmp/deployed-index.html
+          grep -q '<title>JLPT Study</title>' /tmp/deployed-index.html
+          grep -q '词卡复习' /tmp/deployed-index.html
           fetch_with_retry "${BASE}data/jmdict-manifest.json" /tmp/deployed-jmdict-manifest.json
           fetch_with_retry "${BASE}data/$JMDICT_COMMON" "/tmp/$JMDICT_COMMON"
           fetch_with_retry "${BASE}data/$JMDICT_EXAMPLES" "/tmp/$JMDICT_EXAMPLES"
           python - <<'PY'
           import hashlib
           import json
-          import os
           import pathlib
 
           manifest = json.loads(pathlib.Path('/tmp/deployed-jmdict-manifest.json').read_text(encoding='utf-8'))
