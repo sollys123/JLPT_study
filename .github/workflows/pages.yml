@@ -45,6 +45,19 @@ jobs:
           node tests/dictionary.test.js
           python tests/static_app_test.py
 
+      - name: Validate UI build script
+        run: |
+          python -m py_compile tools/polish_ui.py
+          rm -rf _ui_test
+          mkdir -p _ui_test
+          cp index.html manifest.webmanifest sw.js VERSION.json _ui_test/
+          mkdir -p _ui_test/assets/js
+          cp assets/js/srs-app.js _ui_test/assets/js/
+          python tools/polish_ui.py --root _ui_test
+          grep -q '<title>JLPT Study</title>' _ui_test/index.html
+          grep -q '💀 濒死' _ui_test/index.html
+          rm -rf _ui_test
+
       - name: Fetch, verify and inventory JMdict packages
         run: |
           python tools/fetch_jmdict.py both
@@ -68,6 +81,7 @@ jobs:
           grep -q '词卡复习' _site/index.html
           grep -q '学习路线' _site/index.html
           grep -q '系统设置' _site/index.html
+          grep -q '💀 濒死' _site/index.html
           if grep -RIn --exclude='*.tgz' -E '紫藤学习系统|紫藤计划|紫藤记忆舱|词典与SRS|词典与 SRS' _site; then
             echo 'Legacy public-facing names remain in the built site.' >&2
             exit 1
